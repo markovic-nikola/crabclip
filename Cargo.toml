@@ -2,6 +2,18 @@
 name = "crabclip"
 version = "0.1.0"
 edition = "2021"
+description = "A lightweight Linux clipboard manager with system tray integration"
+license = "MIT"
+
+[package.metadata.deb]
+depends = "libgtk-3-0, libayatana-appindicator3-1, libxdo3"
+section = "utils"
+assets = [
+    ["target/release/crabclip", "usr/bin/", "755"],
+    ["autostart/crabclip.desktop", "usr/share/applications/", "644"],
+    ["assets/icon.png", "usr/share/icons/hicolor/128x128/apps/crabclip.png", "644"],
+    ["README.md", "usr/share/doc/crabclip/README.md", "644"],
+]
 
 [dependencies]
 arboard        = { version = "3", features = ["image-data"] }

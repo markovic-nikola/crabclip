@@ -19,11 +19,26 @@ CrabClip runs silently in the background with a system tray icon. It monitors th
 - Pin entries to keep them permanently
 - Global hotkey (`Ctrl+Alt+C`) to quickly paste the previous entry
 - Preferences menu for Launch at Login, Show Images, and Max History
-- Lightweight — single binary, no runtime dependencies beyond GTK 3
+- Lightweight — single binary with minimal system dependencies
+
+## Requirements
+
+- Debian/Ubuntu-based Linux distribution (e.g., Ubuntu, Linux Mint, Pop!_OS)
+- X11 display server (Wayland is not supported)
+- GTK 3
 
 ## Installation
 
+Download the latest `.deb` from [Releases](../../releases) and install:
+
 ```bash
+sudo dpkg -i crabclip_*.deb
+```
+
+### From Source
+
+```bash
+sudo apt install libgtk-3-dev libayatana-appindicator3-dev libxdo-dev pkg-config
 git clone https://github.com/your-username/crabclip.git
 cd crabclip
 cargo build --release
