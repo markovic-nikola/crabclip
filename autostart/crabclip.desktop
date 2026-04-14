@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CrabClip
+GenericName=Clipboard Manager
+Comment=Clipboard history manager with tray icon
+Exec=/usr/local/bin/crabclip
+Icon=crabclip
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Categories=Utility;
