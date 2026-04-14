@@ -36,55 +36,51 @@ pub fn start_watcher(
             // data on the clipboard for "Copy Image", so check image before text.
             let show_images = settings.lock().map(|s| s.show_images).unwrap_or(true);
             if show_images {
-            if let Ok(img_data) = clipboard.get_image() {
-                let raw_size = img_data.width * img_data.height * 4;
-                if raw_size > MAX_IMAGE_BYTES {
-                    continue;
-                }
+                if let Ok(img_data) = clipboard.get_image() {
+                    let raw_size = img_data.width * img_data.height * 4;
+                    if raw_size > MAX_IMAGE_BYTES {
+                        continue;
+                    }
 
-                let fingerprint_bytes: Vec<u8> = img_data
-                    .bytes
-                    .iter()
-                    .take(256)
-                    .copied()
-                    .collect();
-                let fingerprint = (img_data.bytes.len(), fingerprint_bytes);
+                    let fingerprint_bytes: Vec<u8> =
+                        img_data.bytes.iter().take(256).copied().collect();
+                    let fingerprint = (img_data.bytes.len(), fingerprint_bytes);
 
-                if Some(&fingerprint) != last_image_fingerprint.as_ref() {
-                    last_image_fingerprint = Some(fingerprint);
-                    last_text = None;
+                    if Some(&fingerprint) != last_image_fingerprint.as_ref() {
+                        last_image_fingerprint = Some(fingerprint);
+                        last_text = None;
 
-                    let width = img_data.width as u32;
-                    let height = img_data.height as u32;
+                        let width = img_data.width as u32;
+                        let height = img_data.height as u32;
 
-                    if let Some(rgba) =
-                        image::RgbaImage::from_raw(width, height, img_data.bytes.into_owned())
-                    {
-                        let mut png_bytes = Vec::new();
-                        let dyn_img = DynamicImage::ImageRgba8(rgba);
-                        if dyn_img
-                            .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
-                            .is_ok()
+                        if let Some(rgba) =
+                            image::RgbaImage::from_raw(width, height, img_data.bytes.into_owned())
                         {
-                            // Clear suppress since this is an image, not text
-                            if let Ok(mut s) = suppress.lock() {
-                                *s = None;
-                            }
+                            let mut png_bytes = Vec::new();
+                            let dyn_img = DynamicImage::ImageRgba8(rgba);
+                            if dyn_img
+                                .write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png)
+                                .is_ok()
+                            {
+                                // Clear suppress since this is an image, not text
+                                if let Ok(mut s) = suppress.lock() {
+                                    *s = None;
+                                }
 
-                            let png_base64 = STANDARD.encode(&png_bytes);
-                            let entry = ClipEntry::new(ClipContent::Image {
-                                png_base64,
-                                width,
-                                height,
-                            });
-                            if tx.send(entry).is_err() {
-                                return;
+                                let png_base64 = STANDARD.encode(&png_bytes);
+                                let entry = ClipEntry::new(ClipContent::Image {
+                                    png_base64,
+                                    width,
+                                    height,
+                                });
+                                if tx.send(entry).is_err() {
+                                    return;
+                                }
                             }
                         }
+                        continue;
                     }
-                    continue;
                 }
-            }
             } // show_images
 
             // Try text

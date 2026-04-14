@@ -60,7 +60,12 @@ pub fn run_tray(
     let quit_id = quit_item.id().clone();
 
     // Build Preferences submenu
-    let launch_at_login = CheckMenuItem::new("Launch at Login", true, current_settings.launch_at_login, None);
+    let launch_at_login = CheckMenuItem::new(
+        "Launch at Login",
+        true,
+        current_settings.launch_at_login,
+        None,
+    );
     let show_images = CheckMenuItem::new("Show Images", true, current_settings.show_images, None);
 
     let max_history_sub = Submenu::new("Max History", true);
@@ -115,9 +120,9 @@ pub fn run_tray(
 
     // Populate menu from existing history
     {
-                    let si = state.show_images.is_checked();
-                    rebuild_history_menu(&mut state, &history, si);
-                }
+        let si = state.show_images.is_checked();
+        rebuild_history_menu(&mut state, &history, si);
+    }
 
     let mut last_save = Instant::now();
     let mut dirty = false;
@@ -134,9 +139,9 @@ pub fn run_tray(
             dirty = true;
             drop(hist);
             {
-                    let si = state.show_images.is_checked();
-                    rebuild_history_menu(&mut state, &history, si);
-                }
+                let si = state.show_images.is_checked();
+                rebuild_history_menu(&mut state, &history, si);
+            }
         }
 
         // Poll hotkey events — Ctrl+Alt+C copies the previous clipboard entry
@@ -152,9 +157,9 @@ pub fn run_tray(
                         history.lock().unwrap().move_to_top(&entry_id);
                         dirty = true;
                         {
-                    let si = state.show_images.is_checked();
-                    rebuild_history_menu(&mut state, &history, si);
-                }
+                            let si = state.show_images.is_checked();
+                            rebuild_history_menu(&mut state, &history, si);
+                        }
                     }
                 }
             }
@@ -259,8 +264,16 @@ fn rebuild_history_menu(state: &mut MenuState, history: &Arc<Mutex<History>>, sh
     // Insert in reverse order at position 0 so the final order is:
     // pinned entries, separator (if pinned exist), unpinned entries
 
-    let unpinned: Vec<_> = hist.entries.iter().filter(|e| !e.pinned && is_visible(e)).collect();
-    let pinned: Vec<_> = hist.entries.iter().filter(|e| e.pinned && is_visible(e)).collect();
+    let unpinned: Vec<_> = hist
+        .entries
+        .iter()
+        .filter(|e| !e.pinned && is_visible(e))
+        .collect();
+    let pinned: Vec<_> = hist
+        .entries
+        .iter()
+        .filter(|e| e.pinned && is_visible(e))
+        .collect();
 
     let mut count = 0;
 
@@ -312,7 +325,6 @@ fn make_thumbnail_icon(png_base64: &str) -> Option<MenuIcon> {
     let (w, h) = rgba.dimensions();
     MenuIcon::from_rgba(rgba.into_raw(), w, h).ok()
 }
-
 
 /// Insert a history entry into the menu at position 0.
 /// Image entries use `IconMenuItem` with a real thumbnail;

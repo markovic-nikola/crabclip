@@ -57,8 +57,7 @@ impl History {
     pub fn load(path: &Path, max_size: usize) -> Self {
         match fs::read_to_string(path) {
             Ok(data) => {
-                let entries: VecDeque<ClipEntry> =
-                    serde_json::from_str(&data).unwrap_or_default();
+                let entries: VecDeque<ClipEntry> = serde_json::from_str(&data).unwrap_or_default();
                 Self { entries, max_size }
             }
             Err(_) => Self::new(max_size),
