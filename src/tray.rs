@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tray_icon::menu::ContextMenu;
 use tray_icon::menu::{
     CheckMenuItem, Icon as MenuIcon, IconMenuItem, Menu, MenuEvent, MenuId, MenuItem,
     PredefinedMenuItem, Submenu,
 };
-use tray_icon::menu::ContextMenu;
 use tray_icon::{Icon, TrayIconBuilder};
 
 use crate::history::ClipEntry;
@@ -155,7 +155,9 @@ pub fn run_tray(
         if let Some(hk_id) = hotkey_id {
             while let Ok(event) = hotkey_rx.try_recv() {
                 if event.id() == hk_id {
-                    state.menu.show_context_menu_for_gtk_window(&hidden_window, None);
+                    state
+                        .menu
+                        .show_context_menu_for_gtk_window(&hidden_window, None);
                 }
             }
         }
