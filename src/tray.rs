@@ -1,3 +1,5 @@
+use gtk::prelude::*;
+
 use crate::config::Settings;
 use crate::history::{ClipContent, History};
 use arboard::SetExtLinux;
@@ -13,6 +15,7 @@ use tray_icon::menu::{
     CheckMenuItem, Icon as MenuIcon, IconMenuItem, Menu, MenuEvent, MenuId, MenuItem,
     PredefinedMenuItem, Submenu,
 };
+use tray_icon::menu::ContextMenu;
 use tray_icon::{Icon, TrayIconBuilder};
 
 use crate::history::ClipEntry;
@@ -41,6 +44,10 @@ pub fn run_tray(
     history_path: PathBuf,
 ) {
     gtk::init().expect("Failed to init GTK");
+
+    // Hidden window used as anchor for programmatic context menu popup
+    let hidden_window = gtk::Window::new(gtk::WindowType::Popup);
+    hidden_window.realize();
 
     // Register global hotkey after gtk::init() so X11 connection is ready
     let hotkey_result = crate::hotkey::register_hotkey();
@@ -144,23 +151,11 @@ pub fn run_tray(
             }
         }
 
-        // Poll hotkey events — Ctrl+Alt+C copies the previous clipboard entry
+        // Poll hotkey events — Ctrl+Alt+C opens the clipboard history menu at cursor
         if let Some(hk_id) = hotkey_id {
             while let Ok(event) = hotkey_rx.try_recv() {
                 if event.id() == hk_id {
-                    let hist = history.lock().unwrap();
-                    // Skip the first entry (current clipboard) and copy the second one
-                    if let Some(entry) = hist.entries.get(1) {
-                        let entry_id = entry.id.clone();
-                        drop(hist);
-                        copy_entry_to_clipboard(&history, &entry_id, &suppress);
-                        history.lock().unwrap().move_to_top(&entry_id);
-                        dirty = true;
-                        {
-                            let si = state.show_images.is_checked();
-                            rebuild_history_menu(&mut state, &history, si);
-                        }
-                    }
+                    state.menu.show_context_menu_for_gtk_window(&hidden_window, None);
                 }
             }
         }

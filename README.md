@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="CrabClip" width="128" />
+  <img src="assets/logo.png" alt="CrabClip" width="128" />
 </p>
 
 <h1 align="center">CrabClip</h1>
@@ -17,7 +17,7 @@ CrabClip runs silently in the background with a system tray icon. It monitors th
 - Text and image clipboard history with configurable size (10–50 entries)
 - Image thumbnails in the tray menu
 - Pin entries to keep them permanently
-- Global hotkey (`Ctrl+Alt+C`) to quickly paste the previous entry
+- Global hotkey (`Ctrl+Alt+C`) to open clipboard history at cursor
 - Preferences menu for Launch at Login, Show Images, and Max History
 - Lightweight — single binary with minimal system dependencies
 
@@ -52,7 +52,7 @@ The binary will be at `target/release/crabclip`.
 ./target/release/crabclip
 ```
 
-CrabClip will appear in your system tray. Click the icon to browse clipboard history, or press `Ctrl+Alt+C` to copy the previous clipboard entry.
+CrabClip will appear in your system tray. Click the icon to browse clipboard history, or press `Ctrl+Alt+C` to open the history menu at your cursor.
 
 ## Configuration
 
