@@ -6,8 +6,10 @@ use arboard::SetExtLinux;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -19,6 +21,8 @@ use tray_icon::menu::{
 use tray_icon::{Icon, TrayIconBuilder};
 
 use crate::history::ClipEntry;
+
+const PREVIEW_MAX_SIZE: u32 = 150;
 
 const MAX_HISTORY_OPTIONS: [usize; 5] = [10, 20, 30, 40, 50];
 
@@ -34,6 +38,10 @@ struct MenuState {
     launch_at_login: CheckMenuItem,
     show_images: CheckMenuItem,
     max_history_items: Vec<(CheckMenuItem, usize)>,
+    /// Floating popup for image preview on hover.
+    preview_window: gtk::Window,
+    /// Maps menu item label text to base64 PNG data for image hover preview.
+    image_label_to_b64: HashMap<String, String>,
 }
 
 pub fn run_tray(
@@ -114,6 +122,23 @@ pub fn run_tray(
         .build()
         .expect("Failed to build tray icon");
 
+    // Floating preview window for image hover
+    let preview_window = gtk::Window::new(gtk::WindowType::Popup);
+    preview_window.set_accept_focus(false);
+    preview_window.set_focus_on_map(false);
+    preview_window.set_keep_above(true);
+    preview_window.set_decorated(false);
+    preview_window.set_skip_taskbar_hint(true);
+    preview_window.set_skip_pager_hint(true);
+    // Style: thin border around the preview
+    let css = gtk::CssProvider::new();
+    let _ = css.load_from_data(
+        b"window { background: @theme_bg_color; border: 1px solid @borders; padding: 4px; }",
+    );
+    preview_window
+        .style_context()
+        .add_provider(&css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+
     let mut state = MenuState {
         entry_map: HashMap::new(),
         menu,
@@ -123,6 +148,8 @@ pub fn run_tray(
         launch_at_login,
         show_images,
         max_history_items,
+        preview_window,
+        image_label_to_b64: HashMap::new(),
     };
 
     // Populate menu from existing history
@@ -246,6 +273,8 @@ fn rebuild_history_menu(state: &mut MenuState, history: &Arc<Mutex<History>>, sh
         state.menu.remove_at(0);
     }
     state.entry_map.clear();
+    state.image_label_to_b64.clear();
+    state.preview_window.hide();
 
     let hist = history.lock().unwrap();
 
@@ -276,7 +305,13 @@ fn rebuild_history_menu(state: &mut MenuState, history: &Arc<Mutex<History>>, sh
 
     // Insert unpinned (reversed so newest ends up at the top)
     for entry in unpinned.iter().rev() {
-        insert_entry_item(&state.menu, &mut state.entry_map, entry, false);
+        insert_entry_item(
+            &state.menu,
+            &mut state.entry_map,
+            &mut state.image_label_to_b64,
+            entry,
+            false,
+        );
         count += 1;
     }
 
@@ -288,11 +323,22 @@ fn rebuild_history_menu(state: &mut MenuState, history: &Arc<Mutex<History>>, sh
 
     // Insert pinned (reversed so first pinned ends up at the top)
     for entry in pinned.iter().rev() {
-        insert_entry_item(&state.menu, &mut state.entry_map, entry, true);
+        insert_entry_item(
+            &state.menu,
+            &mut state.entry_map,
+            &mut state.image_label_to_b64,
+            entry,
+            true,
+        );
         count += 1;
     }
 
     state.history_count = count;
+
+    // Attach hover preview signals to image menu items
+    if !state.image_label_to_b64.is_empty() {
+        attach_image_preview_signals(state);
+    }
 }
 
 fn format_entry_label(entry: &ClipEntry, pinned: bool) -> String {
@@ -329,6 +375,7 @@ fn make_thumbnail_icon(png_base64: &str) -> Option<MenuIcon> {
 fn insert_entry_item(
     menu: &Menu,
     entry_map: &mut HashMap<MenuId, String>,
+    image_label_to_b64: &mut HashMap<String, String>,
     entry: &ClipEntry,
     pinned: bool,
 ) {
@@ -338,6 +385,7 @@ fn insert_entry_item(
             let icon = make_thumbnail_icon(png_base64);
             let item = IconMenuItem::new(&label, true, icon, None);
             entry_map.insert(item.id().clone(), entry.id.clone());
+            image_label_to_b64.insert(label, png_base64.clone());
             let _ = menu.insert(&item, 0);
         }
         _ => {
@@ -345,6 +393,145 @@ fn insert_entry_item(
             entry_map.insert(item.id().clone(), entry.id.clone());
             let _ = menu.insert(&item, 0);
         }
+    }
+}
+
+/// Create a GDK Pixbuf preview from base64-encoded PNG data.
+fn make_preview_pixbuf(png_base64: &str) -> Option<gtk::gdk_pixbuf::Pixbuf> {
+    let png_bytes = STANDARD.decode(png_base64).ok()?;
+    let img = image::load_from_memory(&png_bytes).ok()?;
+    let thumb = img.thumbnail(PREVIEW_MAX_SIZE, PREVIEW_MAX_SIZE);
+    let rgba = thumb.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    let row_stride = w * 4;
+    Some(gtk::gdk_pixbuf::Pixbuf::from_mut_slice(
+        rgba.into_raw(),
+        gtk::gdk_pixbuf::Colorspace::Rgb,
+        true,
+        8,
+        w as i32,
+        h as i32,
+        row_stride as i32,
+    ))
+}
+
+/// Returns true if the GTK menu item is an IconMenuItem (has Box > [Image, Label] structure).
+fn is_icon_menu_item(menu_item: &gtk::MenuItem) -> Option<String> {
+    let child = menu_item.child()?;
+    let box_container = child.downcast_ref::<gtk::Box>()?;
+    let children = box_container.children();
+    if children.len() < 2 {
+        return None;
+    }
+    children[0].downcast_ref::<gtk::Image>()?;
+    let label = children[1].downcast_ref::<gtk::Label>()?;
+    Some(label.text().to_string())
+}
+
+/// Walk the underlying GTK menu and attach select/deselect signals
+/// to image entries so a floating preview appears on hover.
+fn attach_image_preview_signals(state: &mut MenuState) {
+    let gtk_menu = state.menu.gtk_context_menu();
+    let preview = state.preview_window.clone();
+    let label_to_b64 = Rc::new(state.image_label_to_b64.clone());
+
+    // Hide the preview when the menu closes
+    let pw_menu_hide = preview.clone();
+    gtk_menu.connect_hide(move |_| {
+        pw_menu_hide.hide();
+    });
+
+    for widget in gtk_menu.children() {
+        let Some(menu_item) = widget.downcast_ref::<gtk::MenuItem>() else {
+            continue;
+        };
+        let Some(label_text) = is_icon_menu_item(menu_item) else {
+            continue;
+        };
+        if !label_to_b64.contains_key(&label_text) {
+            continue;
+        }
+
+        let map = Rc::clone(&label_to_b64);
+        let label_key = label_text;
+        let pw = preview.clone();
+        let pixbuf_cache: Rc<RefCell<Option<gtk::gdk_pixbuf::Pixbuf>>> =
+            Rc::new(RefCell::new(None));
+
+        let pb: Rc<RefCell<Option<gtk::gdk_pixbuf::Pixbuf>>> = Rc::clone(&pixbuf_cache);
+        menu_item.connect_select(move |item| {
+            let Some(b64) = map.get(&label_key) else {
+                return;
+            };
+
+            // Lazy-decode: create pixbuf on first hover, cache afterwards
+            let mut cached = pb.borrow_mut();
+            if cached.is_none() {
+                *cached = make_preview_pixbuf(b64);
+            }
+            let Some(ref pixbuf) = *cached else {
+                return;
+            };
+
+            // Swap the image content
+            if let Some(child) = pw.child() {
+                pw.remove(&child);
+            }
+            let image = gtk::Image::from_pixbuf(Some(pixbuf));
+            pw.add(&image);
+
+            // Position preview next to the menu, respecting screen edges
+            if let Some(toplevel) = item.toplevel() {
+                if let Some(gdk_win) = toplevel.window() {
+                    let (_, menu_x, menu_y) = gdk_win.origin();
+                    let menu_width = toplevel.allocation().width();
+                    let (_, item_y) = item
+                        .translate_coordinates(&toplevel, 0, 0)
+                        .unwrap_or((0, 0));
+
+                    // Preview dimensions (image + 8px padding from CSS)
+                    let preview_w = pixbuf.width() + 8;
+                    let preview_h = pixbuf.height() + 8;
+                    let target_y = menu_y + item_y;
+
+                    // Get screen geometry to avoid overflow
+                    let display = gdk_win.display();
+                    let (target_x, final_y) = if let Some(monitor) =
+                        display.monitor_at_point(menu_x, menu_y)
+                    {
+                        let work = monitor.workarea();
+
+                        // Prefer right side; fall back to left if it would overflow
+                        let x = if menu_x + menu_width + 4 + preview_w
+                            > work.x() + work.width()
+                        {
+                            menu_x - preview_w - 4
+                        } else {
+                            menu_x + menu_width + 4
+                        };
+
+                        // Clamp vertical position to stay on screen
+                        let y = target_y.clamp(
+                            work.y(),
+                            (work.y() + work.height() - preview_h).max(work.y()),
+                        );
+
+                        (x, y)
+                    } else {
+                        (menu_x + menu_width + 4, target_y)
+                    };
+
+                    pw.move_(target_x, final_y);
+                }
+            }
+
+            pw.show_all();
+        });
+
+        let pw_hide = preview.clone();
+        menu_item.connect_deselect(move |_| {
+            pw_hide.hide();
+        });
     }
 }
 
