@@ -502,9 +502,7 @@ fn attach_image_preview_signals(state: &mut MenuState) {
                         let work = monitor.workarea();
 
                         // Prefer right side; fall back to left if it would overflow
-                        let x = if menu_x + menu_width + 4 + preview_w
-                            > work.x() + work.width()
-                        {
+                        let x = if menu_x + menu_width + 4 + preview_w > work.x() + work.width() {
                             menu_x - preview_w - 4
                         } else {
                             menu_x + menu_width + 4
