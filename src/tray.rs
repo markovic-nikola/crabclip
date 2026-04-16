@@ -105,6 +105,11 @@ pub fn run_tray(
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&clear_item);
     let _ = menu.append(&prefs_sub);
+    // If hotkey registration failed, show a disabled warning below Preferences.
+    if hotkey_id.is_none() {
+        let warning = MenuItem::new("\u{26A0} Hotkey taken by another app", false, None);
+        let _ = menu.append(&warning);
+    }
     let _ = menu.append(&quit_item);
 
     // Load and set tray icon
